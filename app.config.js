@@ -5,6 +5,8 @@ module.exports = {
   expo: {
     name: 'RideOn',
     slug: 'rideon',
+    owner: 'lloidisann', 
+    extra: { eas: { projectId: '0da9a381-8d65-4a18-ace2-a9899c5e6f75' } },
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -38,6 +40,10 @@ module.exports = {
           cameraPermission: 'RideOn needs the camera so riders can take photos of their documents.',
         },
       ],
+
+       'expo-splash-screen',
+      'expo-status-bar',
+      
     ],
     extra: {
       eas: {
