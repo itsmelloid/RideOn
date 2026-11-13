@@ -29,6 +29,8 @@ module.exports = {
       infoPlist: { ITSAppUsesNonExemptEncryption: false },
     },
     plugins: [
+      ['expo-build-properties', { android: { enableMinifyInReleaseBuilds: false, enableShrinkResourcesInReleaseBuilds: false } }],
+      
       [
         'expo-location',
         { locationWhenInUsePermission: 'RideOn uses your location to set your pickup point and show nearby riders.' },

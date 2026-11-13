@@ -17,7 +17,7 @@ export default function SafetyScreen({ navigation }) {
         <View style={{ gap: 10, alignSelf: 'stretch' }}>
           <ListRow icon="share-social" title="Share Trip" onPress={shareTrip} />
           <ListRow icon="alert-circle" title="SOS / Emergency (call 911)" onPress={() => Linking.openURL('tel:911')} />
-          <ListRow icon="headset" title="Contact RideOn Support" onPress={() => Linking.openURL('mailto:support@rideon.example')} />
+          <ListRow icon="headset" title="Contact RideOn Support" onPress={() => Linking.openURL('mailto:support@rideon.')} />
           <ListRow icon="flag" title="Report a Problem" onPress={() => Alert.alert('Report received', 'Thanks — our team will review your report.')} />
         </View>
       </View>

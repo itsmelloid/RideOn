@@ -3,6 +3,7 @@ import { View, ScrollView, Image, Pressable, Modal, KeyboardAvoidingView, Platfo
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from '../../components/AppText';
 import Button from '../../components/Button';
@@ -20,11 +21,20 @@ const Section = ({ icon, title }) => (
 );
 
 const parseDate = (v) => {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(v);
   if (!m) return null;
   const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
   return d.getMonth() === Number(m[1]) - 1 && d.getDate() === Number(m[2]) ? d : null;
 };
+
+function Upload({ label, document, onPick, sub }) {
+  return <View style={{ flex: 1 }}>
+    <AppText variant="label" style={{ marginBottom: 6, fontSize: 8 }}>{label}</AppText>
+    <Pressable onPress={onPick} style={styles.drop} accessibilityRole="button" accessibilityLabel={sub}>
+      {document ? <Image source={{ uri: document.uri }} style={StyleSheet.absoluteFill} /> : <><Ionicons name="camera" size={20} color={colors.gray500} /><AppText variant="small" style={{ fontSize: 10, marginTop: 4 }}>{sub}</AppText></>}
+    </Pressable>
+  </View>;
+}
 
 export default function RiderRegistrationScreen() {
   const insets = useSafeAreaInsets();
@@ -36,19 +46,37 @@ export default function RiderRegistrationScreen() {
   const [loading, setLoading] = useState(false);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
 
+  // Admin previews run in a browser too. Always upload photos as JPEG so an
+  // iPhone HEIC or a PNG selected by the rider cannot become a broken .jpg link.
+  const makePreviewableImage = async (asset, key) => {
+    const context = ImageManipulator.manipulate(asset.uri, { maxWidth: 1920, maxHeight: 1920 });
+    const rendered = await context.renderAsync();
+    const result = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.82 });
+    return { uri: result.uri, name: `${key}.jpg`, mimeType: 'image/jpeg' };
+  };
+
   const pickImage = async (key) => {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (!res.canceled && res.assets?.length) setDocs((d) => ({ ...d, [key]: { uri: res.assets[0].uri, name: 'Photo selected' } }));
-    } catch (e) {
+      if (!res.canceled && res.assets?.length) {
+        const image = await makePreviewableImage(res.assets[0], key);
+        setDocs((d) => ({ ...d, [key]: image }));
+      }
+    } catch {
       Alert.alert('Could not open photos', 'Please allow photo access in your phone settings.');
     }
   };
   const pickDocument = async () => {
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: ['image/*', 'application/pdf'], copyToCacheDirectory: true });
-      if (!res.canceled && res.assets?.length) setDocs((d) => ({ ...d, orcr: { uri: res.assets[0].uri, name: res.assets[0].name } }));
-    } catch (e) {
+      if (!res.canceled && res.assets?.length) {
+        const asset = res.assets[0];
+        const document = asset.mimeType?.startsWith('image/')
+          ? await makePreviewableImage(asset, 'orcr')
+          : { uri: asset.uri, name: asset.name || 'orcr.pdf', mimeType: asset.mimeType || 'application/pdf' };
+        setDocs((d) => ({ ...d, orcr: document }));
+      }
+    } catch {
       Alert.alert('Could not open files', 'Please try again.');
     }
   };
@@ -59,7 +87,7 @@ export default function RiderRegistrationScreen() {
     if (!isValidPhone(f.phone.startsWith('+63') ? f.phone : f.phone.replace(/^0?/, '0'))) e.phone = 'Enter a valid PH mobile number.';
     if (!/^[A-Z]\d{2}-\d{2}-\d{6}$/i.test(f.license.trim())) e.license = 'Use the format N01-00-123456.';
     const d = parseDate(f.expiry);
-    if (!d) e.expiry = 'Use mm/dd/yyyy.';
+    if (!d) e.expiry = 'Use mm-dd-yyyy.';
     else if (d <= new Date()) e.expiry = 'Your license must not be expired.';
     if (f.model.trim().length < 2) e.model = 'Enter your vehicle model.';
     if (!/^[A-Z0-9]{3}[ -]?[A-Z0-9]{3,4}$/i.test(f.plate.trim())) e.plate = 'Enter a valid plate number.';
@@ -70,7 +98,7 @@ export default function RiderRegistrationScreen() {
     if (Object.keys(e).length) return;
     setLoading(true);
     try {
-      const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.expiry);
+      const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(f.expiry);
       await submitApplication(
         { fullName: f.fullName.trim(), plate: f.plate.trim().toUpperCase(), model: f.model.trim(), license: f.license.trim().toUpperCase(), expiryIso: `${m[3]}-${m[1]}-${m[2]}` },
         { 'license-front': docs.front, 'license-back': docs.back, orcr: docs.orcr, 'tricycle-photo': docs.photo }
@@ -80,15 +108,6 @@ export default function RiderRegistrationScreen() {
       Alert.alert('Could not submit', err.message);
     }
   };
-
-  const Upload = ({ label, k, sub }) => (
-    <View style={{ flex: 1 }}>
-      <AppText variant="label" style={{ marginBottom: 6, fontSize: 8 }}>{label}</AppText>
-      <Pressable onPress={() => pickImage(k)} style={styles.drop} accessibilityRole="button" accessibilityLabel={sub}>
-        {docs[k] ? <Image source={{ uri: docs[k].uri }} style={StyleSheet.absoluteFill} /> : <><Ionicons name="camera" size={20} color={colors.gray500} /><AppText variant="small" style={{ fontSize: 10, marginTop: 4 }}>{sub}</AppText></>}
-      </Pressable>
-    </View>
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
@@ -110,14 +129,14 @@ export default function RiderRegistrationScreen() {
           <Input label="Mobile Number (cannot be changed)" placeholder="+63 912 345 6789" keyboardType="phone-pad" value={f.phone} editable={false} error={errors.phone} />
           <Section icon="card" title="License Details" />
           <Input label="Driver's License Number" placeholder="N01-00-123456" autoCapitalize="characters" value={f.license} onChangeText={set('license')} error={errors.license} />
-          <Input label="Expiry Date" placeholder="mm/dd/yyyy" keyboardType="number-pad" value={f.expiry} onChangeText={set('expiry')} error={errors.expiry} maxLength={10} />
+          <Input label="Expiry Date" placeholder="mm-dd-yyyy" keyboardType="number-pad" value={f.expiry} onChangeText={set('expiry')} error={errors.expiry} maxLength={10} />
           <Section icon="bicycle" title="Vehicle Information" />
           <Input label="Vehicle Model (Tricycle)" placeholder="Bajaj RE / TVS King" autoCapitalize="words" value={f.model} onChangeText={set('model')} error={errors.model} />
           <Input label="Plate Number" placeholder="123 ABC" autoCapitalize="characters" value={f.plate} onChangeText={set('plate')} error={errors.plate} />
           <Section icon="cloud-upload" title="Document Uploads" />
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Upload label="LICENSE (FRONT)" k="front" sub="Upload Front" />
-            <Upload label="LICENSE (BACK)" k="back" sub="Upload Back" />
+            <Upload label="LICENSE (FRONT)" document={docs.front} onPick={() => pickImage('front')} sub="Upload Front" />
+            <Upload label="LICENSE (BACK)" document={docs.back} onPick={() => pickImage('back')} sub="Upload Back" />
           </View>
           <AppText variant="label" style={{ marginTop: 14, marginBottom: 6, fontSize: 8 }}>VEHICLE PERMIT / ORCR</AppText>
           <View style={styles.orcr}>
@@ -136,7 +155,7 @@ export default function RiderRegistrationScreen() {
           <AppText variant="small" align="center" style={{ fontSize: 10, marginTop: 12 }}>By submitting, you agree to our Rider Terms and Privacy Policy.</AppText>
         </ScrollView>
       </KeyboardAvoidingView>
-      <Pressable style={[styles.support, { bottom: insets.bottom + 16 }]} onPress={() => Linking.openURL('mailto:support@rideon.example')} accessibilityLabel="Contact support"><Ionicons name="headset" size={20} color={colors.yellow} /></Pressable>
+      <Pressable style={[styles.support, { bottom: insets.bottom + 16 }]} onPress={() => Linking.openURL('mailto:support@rideon.com')} accessibilityLabel="Contact support"><Ionicons name="headset" size={20} color={colors.yellow} /></Pressable>
       <Modal transparent visible={preview} animationType="fade" onRequestClose={() => setPreview(false)}>
         <View style={styles.backdrop}>
           <View style={styles.box}>

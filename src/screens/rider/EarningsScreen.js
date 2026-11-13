@@ -76,7 +76,7 @@ export default function EarningsScreen({ navigation }) {
           ))}
         </Card>
         <Button title="Download Statement" icon="download-outline" upper onPress={statement} style={{ marginTop: 16 }} />
-        <Button title="Report Discrepancy" variant="outline" icon="warning-outline" upper onPress={() => Linking.openURL('mailto:support@rideon.example?subject=Earnings%20discrepancy')} style={{ marginTop: 10 }} />
+        <Button title="Report Discrepancy" variant="outline" icon="warning-outline" upper onPress={() => Linking.openURL('mailto:support@rideon.com?subject=Earnings%20discrepancy')} style={{ marginTop: 10 }} />
       </ScrollView>
     </View>
   );

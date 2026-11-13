@@ -16,8 +16,7 @@ const toUser = (p) => ({
   name: p.full_name,
   phone: p.phone,
   email: p.email,
-  // "rejected" shows the review screen for now.
-  status: p.role === 'rider' ? (p.rider_status === 'rejected' ? 'pending' : p.rider_status) : undefined,
+  status: p.role === 'rider' ? p.rider_status : undefined,
   rides: p.rides_count,
   rating: Number(p.rating),
   since: new Date(p.created_at).getFullYear(),

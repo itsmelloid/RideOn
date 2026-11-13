@@ -43,7 +43,7 @@ export default function RiderProfileScreen({ navigation }) {
         <Card style={{ marginTop: 12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
             <AppText variant="label" color={colors.black}>VEHICLE</AppText>
-            <AppText variant="label" color={colors.black} style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL('mailto:support@rideon.example?subject=Vehicle%20change')}>Request change</AppText>
+            <AppText variant="label" color={colors.black} style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL('mailto:support@rideon.com?subject=Vehicle%20change')}>Request change</AppText>
           </View>
           <Info l="Type" v={user?.vehicleModel || 'Tricycle'} /><Info l="Plate number" v={user?.plate || '-'} /><Info l="License valid until" v={user?.licenseExpiry || '-'} />
         </Card>
@@ -58,7 +58,7 @@ export default function RiderProfileScreen({ navigation }) {
         <View style={{ gap: 8 }}>
           <ListRow icon="lock-closed" title="Change Password" onPress={() => Alert.alert('Change password', 'Needs a backend.')} />
           <ListRow icon="notifications" title="Notifications" onPress={() => Alert.alert('Notifications', 'No new notifications.')} />
-          <ListRow icon="help-circle" title="Support / Report" onPress={() => Linking.openURL('mailto:support@rideon.example')} />
+          <ListRow icon="help-circle" title="Support / Report" onPress={() => Linking.openURL('mailto:support@rideon.com')} />
           <ListRow icon="log-out-outline" title="Log Out" danger onPress={() => setLogout(true)} />
         </View>
       </ScrollView>

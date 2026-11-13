@@ -22,11 +22,14 @@ export const listTrips = async (column, uid) =>
 export const uploadDocument = async (uid, name, file) => {
   const res = await fetch(file.uri);
   const bytes = await res.arrayBuffer();
-  const ext = (file.name && file.name.includes('.') ? file.name.split('.').pop() : 'jpg').toLowerCase();
+  const suppliedExt = (file.name && file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
+  const isPdf = file.mimeType === 'application/pdf' || suppliedExt === 'pdf';
+  const ext = isPdf ? 'pdf' : file.mimeType === 'image/png' ? 'png' : file.mimeType === 'image/webp' ? 'webp' : 'jpg';
   const path = `${uid}/${name}.${ext}`;
+  const contentType = isPdf ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
   const { error } = await supabase.storage.from('rider-documents').upload(path, bytes, {
     upsert: true,
-    contentType: ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+    contentType,
   });
   if (error) throw new Error(error.message);
   return path;

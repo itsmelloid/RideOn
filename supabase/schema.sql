@@ -189,7 +189,7 @@ create or replace function public.submit_rider_application()
 returns void language plpgsql security definer set search_path = public as $$
 begin
   update public.profiles set rider_status = 'pending', submitted_at = now()
-  where id = auth.uid() and role = 'rider' and rider_status = 'registration'
+  where id = auth.uid() and role = 'rider' and rider_status in ('registration', 'rejected')
     and plate is not null and license_number is not null;
   if not found then raise exception 'Application is incomplete or already submitted'; end if;
 end $$;

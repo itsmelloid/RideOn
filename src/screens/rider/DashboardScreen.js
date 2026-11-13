@@ -47,7 +47,7 @@ export default function DashboardScreen({ navigation }) {
             <AppText variant="h3">{user?.name}</AppText>
           </View>
         </View>
-        <Pressable style={styles.round} onPress={() => Alert.alert('Support', 'Email support@rideon.example for help.')} accessibilityLabel="Support"><Ionicons name="headset" size={18} /></Pressable>
+        <Pressable style={styles.round} onPress={() => Alert.alert('Support', 'Email support@rideon.com for help.')} accessibilityLabel="Support"><Ionicons name="headset" size={18} /></Pressable>
         <Pressable style={[styles.round, { marginLeft: 8 }]} onPress={() => Alert.alert('Notifications', 'No new notifications.')} accessibilityLabel="Notifications"><Ionicons name="notifications" size={18} /><View style={styles.dot} /></Pressable>
       </View>
       <View style={styles.pad}>

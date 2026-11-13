@@ -39,7 +39,7 @@ export default function PassengerProfileScreen({ navigation }) {
           <ListRow icon="calendar" title="My Bookings" onPress={() => navigation.navigate('Bookings')} />
           <ListRow icon="wallet" title="Wallet & Payments" onPress={() => navigation.navigate('Wallet')} />
           <ListRow icon="notifications" title="Notification Settings" onPress={() => soon('Notification Settings')} />
-          <ListRow icon="headset" title="Help & Support" onPress={() => Linking.openURL('mailto:support@rideon.example')} />
+          <ListRow icon="headset" title="Help & Support" onPress={() => Linking.openURL('mailto:support@rideon.com')} />
           <ListRow icon="information-circle" title="About RideOn" onPress={() => Alert.alert('RideOn', 'Version 1.0.0\nServing the heart of Agusan del Sur.')} />
         </View>
         <View style={{ alignItems: 'center', marginVertical: 16 }}>

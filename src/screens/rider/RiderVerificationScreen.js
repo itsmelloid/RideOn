@@ -45,7 +45,7 @@ export default function RiderVerificationScreen() {
       setChecking(false);
     }
   };
-  const support = () => Linking.openURL('mailto:support@rideon.example?subject=Rider%20application');
+  const support = () => Linking.openURL('mailto:support@rideon.com?subject=Rider%20application');
 
   return (
     <View style={styles.flex}>

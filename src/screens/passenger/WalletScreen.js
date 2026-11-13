@@ -68,7 +68,7 @@ export default function WalletScreen({ navigation }) {
             <AppText variant="h3" color={colors.white}>Having issues?</AppText>
             <AppText variant="small" color={colors.gray400} style={{ fontSize: 11 }}>Our team is here to help with your payments.</AppText>
           </View>
-          <Pressable style={styles.helpBtn} onPress={() => Linking.openURL('mailto:support@rideon.example?subject=Payment%20help')}><AppText variant="label" color={colors.black} style={{ fontSize: 9 }}>REQUEST{'\n'}HELP</AppText></Pressable>
+          <Pressable style={styles.helpBtn} onPress={() => Linking.openURL('mailto:support@rideon.com?subject=Payment%20help')}><AppText variant="label" color={colors.black} style={{ fontSize: 9 }}>REQUEST{'\n'}HELP</AppText></Pressable>
         </Card>
         <View style={styles.offers}>
           <Image source={images.bannerOffers} style={StyleSheet.absoluteFill} resizeMode="cover" />
