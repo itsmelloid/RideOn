@@ -29,7 +29,9 @@ module.exports = {
       infoPlist: { ITSAppUsesNonExemptEncryption: false },
     },
     plugins: [
-      ['expo-build-properties', { android: { enableMinifyInReleaseBuilds: false, enableShrinkResourcesInReleaseBuilds: false } }],
+      ['expo-build-properties', { android: { enableMinifyInReleaseBuilds: false, enableShrinkResourcesInReleaseBuilds: false } }
+        
+      ],
       
       [
         'expo-location',

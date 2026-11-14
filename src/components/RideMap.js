@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
 import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { BUNAWAN_CENTER } from '../data/places';
+import { hasMapsKey } from '../services/maps';
 
 const DEFAULT_REGION = { ...BUNAWAN_CENTER, latitudeDelta: 0.03, longitudeDelta: 0.03 };
 
@@ -11,6 +12,14 @@ const DEFAULT_REGION = { ...BUNAWAN_CENTER, latitudeDelta: 0.03, longitudeDelta:
 export default function RideMap({ pickup, destination, riderLocation, path, userLocation, style, interactive = true, padding, circle }) {
   const ref = useRef(null);
   const padKey = JSON.stringify(padding || null);
+  const [loaded, setLoaded] = useState(false); // true once Google has drawn the map tiles
+  const [slow, setSlow] = useState(false);
+
+  // If the map is still not drawn after 10 s, show a hint instead of a silent grey box.
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const pts = [pickup, destination, riderLocation, ...(path && path.length ? [path[0], path[path.length - 1]] : [])].filter(Boolean);
@@ -27,6 +36,17 @@ export default function RideMap({ pickup, destination, riderLocation, path, user
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup, destination, riderLocation, path, padKey]);
 
+  // In an installed APK the map needs YOUR Google Maps key inside the app (Expo Go has its own, so it hid this).
+  // Without a key, Android can crash the whole app when a map is created - so show a notice instead.
+  if (!hasMapsKey()) {
+    return (
+      <View style={[styles.wrap, styles.noKey, style]}>
+        <Ionicons name="map-outline" size={34} color={colors.gray500} />
+        <Text style={styles.noKeyText}>Map unavailable: this build has no Google Maps API key.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrap, style]}>
       <MapView
@@ -41,6 +61,10 @@ export default function RideMap({ pickup, destination, riderLocation, path, user
         zoomEnabled={interactive}
         rotateEnabled={false}
         pitchEnabled={false}
+        loadingEnabled
+        loadingIndicatorColor={colors.yellow}
+        loadingBackgroundColor={colors.gray100}
+        onMapLoaded={() => setLoaded(true)}
       >
         {circle ? <Circle center={circle.center} radius={circle.radius} fillColor="rgba(251,178,7,0.30)" strokeColor="rgba(251,178,7,0.8)" strokeWidth={1} /> : null}
         {path && path.length > 1 ? <Polyline coordinates={path} strokeColor="#4F2BE8" strokeWidth={5} lineCap="round" lineJoin="round" /> : null}
@@ -60,11 +84,22 @@ export default function RideMap({ pickup, destination, riderLocation, path, user
           </Marker>
         ) : null}
       </MapView>
+      {slow && !loaded ? (
+        <View style={styles.hint} pointerEvents="none">
+          <Text style={styles.hintTitle}>Map is taking too long to load</Text>
+          <Text style={styles.hintText}>Check your internet connection. If it stays grey, the Google Maps key for this build needs to be fixed.</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  hint: { position: 'absolute', left: 12, right: 12, bottom: 12, backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: 12, padding: 12 },
+  hintTitle: { color: colors.white, fontSize: 12, fontWeight: '700' },
+  hintText: { color: colors.gray300, fontSize: 11, marginTop: 3 },
+  noKey: { alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: colors.gray100 },
+  noKeyText: { marginTop: 8, color: colors.gray600, fontSize: 12, textAlign: 'center' },
   wrap: { overflow: 'hidden', backgroundColor: '#E5F3E8' },
   pickupDot: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.yellow },
   pickupInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.black },
