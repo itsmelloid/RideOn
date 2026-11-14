@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Image, Modal, Pressable, StyleSheet, Alert, Linking } from 'react-native';
+import { View, ScrollView, Image, Modal, Pressable, StyleSheet, Alert, Linking, TextInput } from 'react-native';
 import YellowHeader from '../../components/YellowHeader';
 import AppText from '../../components/AppText';
 import Button from '../../components/Button';
@@ -15,11 +15,13 @@ import { colors, radius, shadow } from '../../theme';
 const AMOUNTS = [50, 100, 200, 500];
 
 export default function WalletScreen({ navigation }) {
-  const { balance, transactions, topUp } = useBooking();
+  const { balance, transactions, topupRequests, requestTopUp } = useBooking();
   const { user } = useAuth();
   const [showAll, setShowAll] = useState(false);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [amount, setAmount] = useState(100);
+  const [referenceNote, setReferenceNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const list = showAll ? transactions : transactions.slice(0, 3);
 
   const actions = [
@@ -63,6 +65,20 @@ export default function WalletScreen({ navigation }) {
             </View>
           </Card>
         ))}
+        <SectionLabel style={{ marginTop: 18 }}>CASH-IN REQUESTS</SectionLabel>
+        {topupRequests.length === 0 ? <AppText variant="small" color={colors.gray500} style={{ marginTop: 4 }}>No cash-in requests yet.</AppText> : topupRequests.map((request) => (
+          <Card key={request.id} style={styles.tx}>
+            <IconBox icon="time" size={42} round bg={request.status === 'approved' ? colors.black : colors.gray600} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <AppText variant="bodyBold">Cash-in request</AppText>
+              <AppText variant="small" style={{ fontSize: 10 }}>{new Date(request.created_at).toLocaleDateString('en-PH')}{request.reference_note ? ` · ${request.reference_note}` : ''}</AppText>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <AppText variant="bodyBold">{peso(request.amount, { sign: true })}</AppText>
+              <Badge text={request.status.toUpperCase()} tone={request.status === 'approved' ? 'black' : request.status === 'rejected' ? 'gray' : 'yellow'} />
+            </View>
+          </Card>
+        ))}
         <Card dark style={styles.help}>
           <View style={{ flex: 1 }}>
             <AppText variant="h3" color={colors.white}>Having issues?</AppText>
@@ -87,8 +103,22 @@ export default function WalletScreen({ navigation }) {
                 </Pressable>
               ))}
             </View>
-            <Button title={`Add ${peso(amount)}`} variant="accent" onPress={async () => { try { await topUp(amount); setTopUpOpen(false); } catch (e) { Alert.alert('Top up failed', e.message); } }} />
-            <Button title="Cancel" variant="ghost" onPress={() => setTopUpOpen(false)} style={{ marginTop: 6 }} />
+            <AppText variant="label" style={{ fontSize: 8, marginTop: 4 }}>PAYMENT REFERENCE / NOTE</AppText>
+            <TextInput value={referenceNote} onChangeText={setReferenceNote} maxLength={160} placeholder="Example: GCash ref 123456 or paid cash to RideOn" placeholderTextColor={colors.gray400} style={styles.referenceInput} />
+            <Button title={`Submit ${peso(amount)} request`} variant="accent" loading={submitting} onPress={async () => {
+              setSubmitting(true);
+              try {
+                await requestTopUp(amount, referenceNote);
+                setReferenceNote('');
+                setTopUpOpen(false);
+                Alert.alert('Cash-in request sent', 'Your wallet balance will update after an admin approves the request.');
+              } catch (e) {
+                Alert.alert('Could not submit request', e.message);
+              } finally {
+                setSubmitting(false);
+              }
+            }} />
+            <Button title="Cancel" variant="ghost" onPress={() => setTopUpOpen(false)} style={{ marginTop: 6 }} disabled={submitting} />
           </View>
         </View>
       </Modal>
@@ -108,4 +138,5 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 34 },
   chip: { flex: 1, backgroundColor: colors.gray100, borderRadius: radius.md, alignItems: 'center', paddingVertical: 12 },
+  referenceInput: { borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.md, color: colors.black, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, paddingHorizontal: 12, paddingVertical: 11, marginTop: 6, marginBottom: 14 },
 });

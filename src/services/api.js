@@ -1,6 +1,6 @@
 
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 
 // Small wrapper: returns data or throws an Error with a readable message.
@@ -18,11 +18,41 @@ export const resolveLoginEmail = async (identifier) =>
 export const updateProfile = async (uid, patch) =>
   must(await supabase.from('profiles').update(patch).eq('id', uid));
 
+export const setAccountSuspension = async (uid, suspended, reason) =>
+  must(
+    await supabase.rpc('set_account_suspension', {
+      p_user_id: uid,
+      p_suspended: suspended,
+      p_reason: reason || null,
+    })
+  );
+
+export const savePushToken = async (uid, token, platform) =>
+  must(await supabase.from('push_tokens').upsert({ user_id: uid, token, platform, updated_at: new Date().toISOString() }, { onConflict: 'token' }));
+
 export const submitRiderApplicationRpc = async () =>
   must(await supabase.rpc('submit_rider_application'));
 
-export const topUpWallet = async (amount) =>
-  Number(must(await supabase.rpc('top_up_wallet', { p_amount: amount })));
+export const createTopupRequest = async (amount, referenceNote) =>
+  must(
+    await supabase.rpc('create_topup_request', {
+      p_amount: amount,
+      p_reference_note: referenceNote || '',
+    })
+  );
+
+export const reviewTopupRequest = async (id, status) =>
+  must(await supabase.rpc('review_topup_request', { p_request_id: id, p_status: status }));
+
+export const listTopupRequests = async (uid) =>
+  must(
+    await supabase
+      .from('topup_requests')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(50)
+  );
 
 export const listTransactions = async (uid) =>
   must(
@@ -44,7 +74,9 @@ export const listTrips = async (column, uid) =>
       .limit(200)
   );
 
-// Upload a picked image/PDF using Expo FileSystem's base64 reader.
+// Upload a picked image/PDF. The registration screen copies picked files to the
+// app documents directory before they reach here, so their URI remains readable
+// after Android's DocumentPicker cache is released.
 export const uploadDocument = async (uid, name, file) => {
   if (!uid) throw new Error('Missing rider user ID.');
   if (!file?.uri) throw new Error(`No file selected for ${name}.`);
@@ -82,9 +114,14 @@ export const uploadDocument = async (uid, name, file) => {
     );
   }
 
-  const base64 = await FileSystem.readAsStringAsync(file.uri, {
-    encoding: 'base64',
-  });
+  const localFile = new File(file.uri);
+  if (!localFile.exists) {
+    throw new Error(
+      `The selected ${name} file is no longer available. Please select it again.`
+    );
+  }
+
+  const base64 = await localFile.base64();
 
   if (!base64 || !base64.trim()) {
     throw new Error(

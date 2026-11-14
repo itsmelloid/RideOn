@@ -5,8 +5,10 @@ import AppText from '../../components/AppText';
 import Button from '../../components/Button';
 import { images } from '../../data/mock';
 import { colors } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
 export default function WelcomeScreen({ navigation }) {
+  const { restrictionNotice } = useAuth();
   return (
     <Screen bg={colors.yellow}>
       <View style={styles.center}>
@@ -18,10 +20,11 @@ export default function WelcomeScreen({ navigation }) {
       <View style={styles.bottom}>
         <Button title="Get Started" iconRight="arrow-forward" onPress={() => navigation.navigate('RoleSelect')} style={{ marginBottom: 12 }} />
         <Button title="Log In" variant="outlineYellow" onPress={() => navigation.navigate('Login')} />
+        {restrictionNotice ? <AppText variant="small" align="center" color={colors.red} style={{ marginTop: 12 }}>{restrictionNotice}</AppText> : null}
         <View style={styles.links}>
-          <AppText variant="small" color={colors.ink}>Terms of Service</AppText>
+          <AppText variant="small" color={colors.ink} onPress={() => navigation.navigate('Legal', { kind: 'terms' })}>Terms of Service</AppText>
           <AppText variant="small" color={colors.ink}>  •  </AppText>
-          <AppText variant="small" color={colors.ink}>Privacy Policy</AppText>
+          <AppText variant="small" color={colors.ink} onPress={() => navigation.navigate('Legal', { kind: 'privacy' })}>Privacy Policy</AppText>
         </View>
         <AppText variant="label" align="center" color="rgba(0,0,0,0.5)" style={{ fontSize: 8, marginTop: 8 }}>— SECURED WITH RIDEON PAY —</AppText>
       </View>

@@ -9,6 +9,7 @@ import RoleSelectScreen from '../screens/auth/RoleSelectScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import OTPScreen from '../screens/auth/OTPScreen';
+import LegalScreen from '../screens/auth/LegalScreen';
 
 import PassengerTabs from './PassengerTabs';
 import DestinationScreen from '../screens/passenger/DestinationScreen';
@@ -50,6 +51,7 @@ export default function RootNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="SignUp" component={SignUpScreen} />
           <Stack.Screen name="OTP" component={OTPScreen} />
+          <Stack.Screen name="Legal" component={LegalScreen} />
         </>
       ) : user.role === 'passenger' ? (
         <>

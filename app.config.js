@@ -44,6 +44,7 @@ module.exports = {
           cameraPermission: 'RideOn needs the camera so riders can take photos of their documents.',
         },
       ],
+      'expo-notifications',
 
        'expo-splash-screen',
       'expo-status-bar',

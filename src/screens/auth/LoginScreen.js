@@ -11,7 +11,7 @@ import { isValidIdentifier } from '../../utils/validation';
 import { colors } from '../../theme';
 
 export default function LoginScreen({ navigation }) {
-  const { signIn, selectedRole } = useAuth();
+  const { signIn, selectedRole, restrictionNotice } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
@@ -52,6 +52,7 @@ export default function LoginScreen({ navigation }) {
             <Input label="Mobile number or email" icon="phone-portrait-outline" placeholder="09XX XXX XXXX" value={identifier} onChangeText={setIdentifier} error={errors.identifier} keyboardType="email-address" />
             <Input label="Password" icon="lock-closed-outline" placeholder="Enter your password" secureTextEntry value={password} onChangeText={setPassword} error={errors.password} />
             {errors.form ? <AppText variant="small" color={colors.red} style={{ marginBottom: 8 }}>{errors.form}</AppText> : null}
+            {restrictionNotice ? <AppText variant="small" color={colors.red} style={{ marginBottom: 8 }}>{restrictionNotice}</AppText> : null}
             <Pressable onPress={() => Alert.alert('Forgot password', 'Password reset needs a backend service. It is not part of this prototype yet.')} style={{ alignSelf: 'flex-end', marginBottom: 16 }}>
               <AppText variant="bodyBold" style={{ fontSize: 12, textDecorationLine: 'underline' }}>Forgot password?</AppText>
             </Pressable>

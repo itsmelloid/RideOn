@@ -3,6 +3,7 @@ import { View, ScrollView, Image, Pressable, Modal, KeyboardAvoidingView, Platfo
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from '../../components/AppText';
@@ -46,13 +47,31 @@ export default function RiderRegistrationScreen() {
   const [loading, setLoading] = useState(false);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
 
+  // DocumentPicker returns a cache URI. On some Android devices that cache can
+  // be cleared before the rider submits, so retain our own copy immediately.
+  const persistPickedFile = async (file, key, extension) => {
+    const source = new File(file.uri);
+    if (!source.exists) throw new Error('The selected file could not be read. Please select it again.');
+
+    const suffix = String(extension || 'bin').replace(/^\./, '').toLowerCase();
+    const destination = new File(
+      Paths.document,
+      `rider-registration-${key}-${Date.now()}-${Math.random().toString(36).slice(2)}.${suffix}`
+    );
+    await source.copy(destination);
+
+    if (!destination.exists) throw new Error('The selected file could not be saved. Please select it again.');
+    return destination.uri;
+  };
+
   // Admin previews run in a browser too. Always upload photos as JPEG so an
   // iPhone HEIC or a PNG selected by the rider cannot become a broken .jpg link.
   const makePreviewableImage = async (asset, key) => {
     const context = ImageManipulator.manipulate(asset.uri, { maxWidth: 1920, maxHeight: 1920 });
     const rendered = await context.renderAsync();
     const result = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.82 });
-    return { uri: result.uri, name: `${key}.jpg`, mimeType: 'image/jpeg' };
+    const uri = await persistPickedFile(result, key, 'jpg');
+    return { uri, name: `${key}.jpg`, mimeType: 'image/jpeg' };
   };
 
   const pickImage = async (key) => {
@@ -73,7 +92,11 @@ export default function RiderRegistrationScreen() {
         const asset = res.assets[0];
         const document = asset.mimeType?.startsWith('image/')
           ? await makePreviewableImage(asset, 'orcr')
-          : { uri: asset.uri, name: asset.name || 'orcr.pdf', mimeType: asset.mimeType || 'application/pdf' };
+          : {
+              uri: await persistPickedFile(asset, 'orcr', asset.name?.split('.').pop() || 'pdf'),
+              name: asset.name || 'orcr.pdf',
+              mimeType: asset.mimeType || 'application/pdf',
+            };
         setDocs((d) => ({ ...d, orcr: document }));
       }
     } catch {

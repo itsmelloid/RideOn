@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { supabase, isSupabaseConfigured, PHONE_EMAIL_DOMAIN } from '../services/supabase';
 import * as api from '../services/api';
+import { registerForPushNotificationsAsync } from '../services/push';
 
 const AuthContext = createContext(null);
 
@@ -25,12 +27,27 @@ const toUser = (p) => ({
   vehicleModel: p.vehicle_model,
   licenseExpiry: p.license_expiry,
   submittedAt: p.submitted_at,
+  suspended: !!p.suspended,
+  suspendedReason: p.suspended_reason || '',
 });
 
 export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedRole, setSelectedRole] = useState('passenger');
+  const [restrictionNotice, setRestrictionNotice] = useState('');
+
+  const enforceAccountAccess = useCallback(async (uid) => {
+    const profile = await api.fetchProfile(uid);
+    if (profile.suspended) {
+      const message = `Your account is restricted.${profile.suspended_reason ? ` Reason: ${profile.suspended_reason}` : ' Contact support for help.'}`;
+      await supabase.auth.signOut();
+      setUser(null);
+      setRestrictionNotice(message);
+      throw new Error(message);
+    }
+    return profile;
+  }, []);
 
   // Restore the saved session on app start.
   useEffect(() => {
@@ -39,7 +56,7 @@ export function AuthProvider({ children }) {
       try {
         if (isSupabaseConfigured) {
           const { data } = await supabase.auth.getSession();
-          if (data.session) setUser(toUser(await api.fetchProfile(data.session.user.id)));
+          if (data.session) setUser(toUser(await enforceAccountAccess(data.session.user.id)));
         }
       } catch (e) {
         // offline or expired session - show the login screen
@@ -56,10 +73,31 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        supabase.auth.getUser().then(({ data }) => {
+          if (data.user) return enforceAccountAccess(data.user.id).then((profile) => setUser(toUser(profile)));
+          return null;
+        }).catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, [enforceAccountAccess]);
+
+  useEffect(() => {
+    if (!user || user.suspended) return undefined;
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) return api.savePushToken(user.id, token, 'android');
+      return null;
+    }).catch(() => {});
+    return undefined;
+  }, [user?.id, user?.suspended]);
+
   const refreshProfile = useCallback(async () => {
     const { data } = await supabase.auth.getUser();
     if (!data?.user) return null;
-    const u = toUser(await api.fetchProfile(data.user.id));
+    const u = toUser(await enforceAccountAccess(data.user.id));
     setUser(u);
     return u;
   }, []);
@@ -77,13 +115,14 @@ export function AuthProvider({ children }) {
     if (!email) throw new Error(INVALID);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(INVALID);
-    const profile = await api.fetchProfile(data.user.id);
+    const profile = await enforceAccountAccess(data.user.id);
     if (profile.role !== role) {
       await supabase.auth.signOut();
       const other = profile.role === 'rider' ? 'Rider' : 'Passenger';
       throw new Error(`This account is registered as a ${other}. Go back and choose ${other}.`);
     }
     const u = toUser(profile);
+    setRestrictionNotice('');
     setUser(u);
     return u;
   }, []);
@@ -101,7 +140,8 @@ export function AuthProvider({ children }) {
       throw new Error(error.message);
     }
     if (!res.session) throw new Error('Email confirmation is still ON in Supabase. Turn off "Confirm email" (Authentication > Sign In / Providers > Email).');
-    const u = toUser(await api.fetchProfile(res.user.id));
+    const u = toUser(await enforceAccountAccess(res.user.id));
+    setRestrictionNotice('');
     setUser(u); // RootNavigator switches to the right app
     return u;
   }, []);
@@ -139,8 +179,8 @@ export function AuthProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ ready, user, selectedRole, setSelectedRole, signIn, signUp, signOut, startSession, refreshProfile, submitApplication }),
-    [ready, user, selectedRole, signIn, signUp, signOut, startSession, refreshProfile, submitApplication]
+    () => ({ ready, user, selectedRole, setSelectedRole, restrictionNotice, setRestrictionNotice, signIn, signUp, signOut, startSession, refreshProfile, submitApplication }),
+    [ready, user, selectedRole, restrictionNotice, signIn, signUp, signOut, startSession, refreshProfile, submitApplication]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

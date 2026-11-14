@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { reviewTopupRequest, setAccountSuspension } from '../services/api';
 import { colors, fonts } from '../theme';
-import RiderReviewModal from './RiderReviewModal';
+import RiderReviewModal from './Riderreviewmodal';
 
 const NAVIGATION = [
   ['Dashboard', 'grid-outline'], ['Bookings', 'calendar-outline'], ['Riders', 'bicycle-outline'], ['Passengers', 'people-outline'], ['Live Tracking', 'navigate-outline'], ['Revenue', 'trending-up-outline'],
@@ -59,7 +60,7 @@ export default function AdminPortal({ forceLogin = false }) {
   const [admin, setAdmin] = useState(null);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState('Dashboard');
-  const [data, setData] = useState({ profiles: [], trips: [] });
+  const [data, setData] = useState({ profiles: [], trips: [], topupRequests: [] });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -67,12 +68,13 @@ export default function AdminPortal({ forceLogin = false }) {
   // CHANGED: no longer clears `message` here, so "Rider approved" is not wiped out right after it appears.
   const load = useCallback(async () => {
     setLoading(true);
-    const [profilesRes, tripsRes] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, phone, email, role, rider_status, rider_code, plate, vehicle_model, license_number, license_expiry, documents, rides_count, rating, created_at, submitted_at').order('created_at', { ascending: false }),
+    const [profilesRes, tripsRes, topupsRes] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, phone, email, role, rider_status, rider_code, plate, vehicle_model, license_number, license_expiry, documents, rides_count, rating, suspended, suspended_reason, created_at, submitted_at').order('created_at', { ascending: false }),
       supabase.from('trips').select('id, trip_code, status, fare, commission, payment_method, created_at, passenger:profiles!trips_passenger_id_fkey(full_name), rider:profiles!trips_rider_id_fkey(full_name)').order('created_at', { ascending: false }).limit(50),
+      supabase.from('topup_requests').select('id, amount, reference_note, status, created_at, reviewed_at, user:profiles!topup_requests_user_id_fkey(full_name, phone)').order('created_at', { ascending: false }).limit(100),
     ]);
-    if (profilesRes.error || tripsRes.error) setMessage(profilesRes.error?.message || tripsRes.error?.message || 'Could not load portal data.');
-    else setData({ profiles: profilesRes.data || [], trips: tripsRes.data || [] });
+    if (profilesRes.error || tripsRes.error || topupsRes.error) setMessage(profilesRes.error?.message || tripsRes.error?.message || topupsRes.error?.message || 'Could not load portal data.');
+    else setData({ profiles: profilesRes.data || [], trips: tripsRes.data || [], topupRequests: topupsRes.data || [] });
     setLoading(false);
   }, []);
 
@@ -102,7 +104,30 @@ export default function AdminPortal({ forceLogin = false }) {
     load();
     return true;
   };
-  const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); setData({ profiles: [], trips: [] }); };
+  const reviewTopup = async (id, status) => {
+    setMessage('');
+    try {
+      await reviewTopupRequest(id, status);
+      setMessage(`Cash-in request ${status}.`);
+      await load();
+    } catch (error) {
+      setMessage(error.message || 'Could not review cash-in request.');
+    }
+  };
+  const toggleSuspension = async (profile) => {
+    const restoring = !!profile.suspended;
+    const reason = restoring ? null : window.prompt(`Why is ${profile.full_name}'s account restricted?`);
+    if (!restoring && !reason?.trim()) return;
+    setMessage('');
+    try {
+      await setAccountSuspension(profile.id, !restoring, reason);
+      setMessage(`${profile.full_name}'s account was ${restoring ? 'restored' : 'restricted'}.`);
+      await load();
+    } catch (error) {
+      setMessage(error.message || 'Could not update account access.');
+    }
+  };
+  const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); setData({ profiles: [], trips: [], topupRequests: [] }); };
   const stats = useMemo(() => {
     const riders = data.profiles.filter(p => p.role === 'rider');
     const completed = data.trips.filter(t => t.status === 'completed');
@@ -112,10 +137,10 @@ export default function AdminPortal({ forceLogin = false }) {
   if (!isSupabaseConfigured) return <View style={styles.center}><Text style={styles.error}>Add Supabase credentials to .env before opening the admin portal.</Text></View>;
   if (!admin) return <Login onSignedIn={setAdmin} />;
   // CHANGED: the old unused "legacy" screen that used to follow this line was removed.
-  return <PrototypeWorkspace admin={admin} tab={tab} setTab={setTab} stats={stats} trips={data.trips} loading={loading} load={refresh} review={review} signOut={signOut} message={message} />;
+  return <PrototypeWorkspace admin={admin} tab={tab} setTab={setTab} stats={stats} trips={data.trips} topupRequests={data.topupRequests} loading={loading} load={refresh} review={review} reviewTopup={reviewTopup} toggleSuspension={toggleSuspension} signOut={signOut} message={message} />;
 }
 
-function PrototypeWorkspace({ admin, tab, setTab, stats, trips, loading, load, review, signOut, message }) {
+function PrototypeWorkspace({ admin, tab, setTab, stats, trips, topupRequests, loading, load, review, reviewTopup, toggleSuspension, signOut, message }) {
   const { width } = useWindowDimensions();
   const isMobile = width < 760;
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -144,9 +169,9 @@ function PrototypeWorkspace({ admin, tab, setTab, stats, trips, loading, load, r
       </View>
       <ScrollView style={[styles.prototypeMain, isMobile && styles.prototypeMainMobile]} contentContainerStyle={[styles.prototypeContent, isMobile && styles.prototypeContentMobile]}>
         <View style={[styles.prototypeTopbar, isMobile && styles.prototypeTopbarMobile]}><View style={isMobile && styles.mobileTitleArea}>{isMobile ? <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={() => setNavigationOpen(true)} style={styles.menuButton}><Ionicons name="menu-outline" size={22} color={colors.black} /></Pressable> : null}<View><Text style={styles.prototypeEyebrow}>RIDEON / ADMIN CONSOLE</Text><Text style={styles.prototypeTitle}>{heading}</Text><Text style={styles.prototypeSub}>Live platform status, rider verification, and bookings in one workspace.</Text></View></View><View style={styles.topActions}><View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE DATA</Text></View><Pressable onPress={load} style={styles.prototypeButton}><Ionicons name="refresh-outline" size={14} color={colors.black} /><Text style={styles.prototypeButtonText}>{loading ? 'Loading' : 'Refresh'}</Text></Pressable></View></View>
-        {message ? <Text style={message.startsWith('Rider ') ? styles.notice : styles.noticeError}>{message}</Text> : null}
+        {message ? <Text style={message.startsWith('Rider ') || message.startsWith('Cash-in ') ? styles.notice : styles.noticeError}>{message}</Text> : null}
         <View style={[styles.prototypeMetrics, isMobile && styles.prototypeMetricsMobile]}><Metric icon="R" label="TOTAL RIDERS" value={stats.riders.length} note={`${stats.pending.length} pending review`} /><Metric icon="P" label="PASSENGERS" value={stats.passengers.length} /><Metric icon="B" label="COMPLETED RIDES" value={stats.completed.length} /><Metric icon="PHP" label="COMMISSION" value={peso(stats.revenue)} /></View>
-        {isDashboard ? <><View style={styles.workspaceHeader}><View><Text style={styles.workspaceTitle}>Pending Rider Applications</Text><Text style={styles.workspaceSub}>Review submitted documents before riders can take bookings.</Text></View><Pressable onPress={() => setTab('Riders')}><Text style={styles.viewAll}>View rider management</Text></Pressable></View><Table rows={stats.pending} kind="riders" onOpen={setSelected} /><View style={styles.workspaceHeader}><View><Text style={styles.workspaceTitle}>Recent Bookings</Text><Text style={styles.workspaceSub}>Latest activity across the RideOn network.</Text></View><Pressable onPress={() => setTab('Bookings')}><Text style={styles.viewAll}>View all bookings</Text></Pressable></View><Table rows={trips.slice(0, 7)} kind="trips" /></> : tab === 'Bookings' ? <Table rows={trips} kind="trips" /> : isPeople ? <><View style={styles.filterStrip}>{filters.map(f => <Pressable key={f} onPress={() => setFilter(f)}><Text style={filter === f ? styles.filterActive : styles.filterText}>{f === 'All' ? (tab === 'Riders' ? 'All riders' : 'All passengers') : f}</Text></Pressable>)}<View style={styles.searchStub}><Ionicons name="search-outline" size={13} color={colors.gray500} /><TextInput value={query} onChangeText={setQuery} placeholder="Search name, phone or plate" placeholderTextColor={colors.gray400} style={styles.searchInput} /></View></View><Table rows={activeRows} kind="riders" onOpen={setSelected} /></> : <View style={styles.placeholderCard}><View style={styles.placeholderIcon}><Ionicons name="construct-outline" size={25} color={colors.black} /></View><Text style={styles.placeholderTitle}>{tab} workspace</Text><Text style={styles.placeholderCopy}>This section is styled and ready for its dedicated workflow. Dashboard, riders, passengers, and bookings already use your live Supabase data.</Text></View>}
+        {isDashboard ? <><View style={styles.workspaceHeader}><View><Text style={styles.workspaceTitle}>Pending Rider Applications</Text><Text style={styles.workspaceSub}>Review submitted documents before riders can take bookings.</Text></View><Pressable onPress={() => setTab('Riders')}><Text style={styles.viewAll}>View rider management</Text></Pressable></View><Table rows={stats.pending} kind="riders" onOpen={setSelected} /><View style={styles.workspaceHeader}><View><Text style={styles.workspaceTitle}>Recent Bookings</Text><Text style={styles.workspaceSub}>Latest activity across the RideOn network.</Text></View><Pressable onPress={() => setTab('Bookings')}><Text style={styles.viewAll}>View all bookings</Text></Pressable></View><Table rows={trips.slice(0, 7)} kind="trips" /></> : tab === 'Bookings' ? <Table rows={trips} kind="trips" /> : tab === 'Transactions' ? <TopupRequests rows={topupRequests} onReview={reviewTopup} loading={loading} /> : isPeople ? <><View style={styles.filterStrip}>{filters.map(f => <Pressable key={f} onPress={() => setFilter(f)}><Text style={filter === f ? styles.filterActive : styles.filterText}>{f === 'All' ? (tab === 'Riders' ? 'All riders' : 'All passengers') : f}</Text></Pressable>)}<View style={styles.searchStub}><Ionicons name="search-outline" size={13} color={colors.gray500} /><TextInput value={query} onChangeText={setQuery} placeholder="Search name, phone or plate" placeholderTextColor={colors.gray400} style={styles.searchInput} /></View></View><Table rows={activeRows} kind="riders" onOpen={setSelected} onSuspend={toggleSuspension} /></> : <View style={styles.placeholderCard}><View style={styles.placeholderIcon}><Ionicons name="construct-outline" size={25} color={colors.black} /></View><Text style={styles.placeholderTitle}>{tab} workspace</Text><Text style={styles.placeholderCopy}>This section is styled and ready for its dedicated workflow. Dashboard, riders, passengers, and bookings already use your live Supabase data.</Text></View>}
       </ScrollView>
       {/* NEW: review window with the rider's details and uploaded documents */}
       <RiderReviewModal rider={current} onClose={() => setSelected(null)} onReview={review} />
@@ -156,10 +181,14 @@ function PrototypeWorkspace({ admin, tab, setTab, stats, trips, loading, load, r
 
 // CHANGED: riders now have a "Review documents" button (pending) or "View" button (others) instead of quick
 // Approve / Reject buttons, so an admin sees the documents before deciding.
-function Table({ rows, kind, onOpen }) {
+function Table({ rows, kind, onOpen, onSuspend }) {
   const isRider = kind === 'riders';
   const headings = isRider ? ['RIDER', 'CONTACT', 'VEHICLE', 'STATUS', 'SUBMITTED', 'ACTION'] : ['BOOKING', 'PASSENGER', 'RIDER', 'FARE', 'PAYMENT', 'STATUS'];
-  return <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.tableScroll}><View style={[styles.table, styles.tableWide]}><View style={styles.tableHead}>{headings.map(x => <Text key={x} style={styles.headCell}>{x}</Text>)}</View>{rows.length === 0 ? <Text style={styles.empty}>No records to show.</Text> : rows.map(row => isRider ? <View style={styles.tableRow} key={row.id}><Text style={styles.cellStrong}>{row.full_name}</Text><Text style={styles.cell}>{row.phone || '—'}</Text><Text style={styles.cell}>{row.plate || '—'}</Text><Status value={row.role === 'rider' ? row.rider_status : row.role} /><Text style={styles.cell}>{date(row.submitted_at || row.created_at)}</Text><View style={styles.actions}>{row.role === 'rider' && onOpen ? <Pressable onPress={() => onOpen(row)} style={row.rider_status === 'pending' ? styles.approve : styles.reject}><Text style={row.rider_status === 'pending' ? styles.actionText : styles.rejectText}>{row.rider_status === 'pending' ? 'Review documents' : 'View'}</Text></Pressable> : <Text style={styles.cell}>—</Text>}</View></View> : <View style={styles.tableRow} key={row.id}><Text style={styles.cellStrong}>{row.trip_code}</Text><Text style={styles.cell}>{row.passenger?.full_name || '—'}</Text><Text style={styles.cell}>{row.rider?.full_name || 'Unassigned'}</Text><Text style={styles.cellStrong}>{peso(row.fare)}</Text><Text style={styles.cell}>{row.payment_method || '—'}</Text><Status value={row.status} /></View>)}</View></ScrollView>;
+  return <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.tableScroll}><View style={[styles.table, styles.tableWide]}><View style={styles.tableHead}>{headings.map(x => <Text key={x} style={styles.headCell}>{x}</Text>)}</View>{rows.length === 0 ? <Text style={styles.empty}>No records to show.</Text> : rows.map(row => isRider ? <View style={styles.tableRow} key={row.id}><Text style={styles.cellStrong}>{row.full_name}</Text><Text style={styles.cell}>{row.phone || '—'}</Text><Text style={styles.cell}>{row.plate || '—'}</Text><Status value={row.suspended ? 'restricted' : row.role === 'rider' ? row.rider_status : row.role} /><Text style={styles.cell}>{date(row.submitted_at || row.created_at)}</Text><View style={styles.actions}>{row.role === 'rider' && onOpen ? <Pressable onPress={() => onOpen(row)} style={row.rider_status === 'pending' ? styles.approve : styles.reject}><Text style={row.rider_status === 'pending' ? styles.actionText : styles.rejectText}>{row.rider_status === 'pending' ? 'Review documents' : 'View'}</Text></Pressable> : null}{onSuspend ? <Pressable onPress={() => onSuspend(row)} style={row.suspended ? styles.approve : styles.reject}><Text style={row.suspended ? styles.actionText : styles.rejectText}>{row.suspended ? 'Restore' : 'Restrict'}</Text></Pressable> : null}{!onOpen && !onSuspend ? <Text style={styles.cell}>—</Text> : null}</View></View> : <View style={styles.tableRow} key={row.id}><Text style={styles.cellStrong}>{row.trip_code}</Text><Text style={styles.cell}>{row.passenger?.full_name || '—'}</Text><Text style={styles.cell}>{row.rider?.full_name || 'Unassigned'}</Text><Text style={styles.cellStrong}>{peso(row.fare)}</Text><Text style={styles.cell}>{row.payment_method || '—'}</Text><Status value={row.status} /></View>)}</View></ScrollView>;
+}
+
+function TopupRequests({ rows, onReview, loading }) {
+  return <><View style={styles.workspaceHeader}><View><Text style={styles.workspaceTitle}>Manual Cash-in Requests</Text><Text style={styles.workspaceSub}>Approve only after confirming the passenger’s cash or e-wallet payment.</Text></View></View><ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.tableScroll}><View style={[styles.table, styles.topupTable]}><View style={styles.tableHead}>{['PASSENGER', 'AMOUNT', 'REFERENCE', 'REQUESTED', 'STATUS', 'ACTION'].map(x => <Text key={x} style={styles.headCell}>{x}</Text>)}</View>{rows.length === 0 ? <Text style={styles.empty}>No cash-in requests to review.</Text> : rows.map(row => <View style={styles.tableRow} key={row.id}><Text style={styles.cellStrong}>{row.user?.full_name || 'Unknown passenger'}</Text><Text style={styles.cellStrong}>{peso(row.amount)}</Text><Text style={styles.cell}>{row.reference_note || '—'}</Text><Text style={styles.cell}>{date(row.created_at)}</Text><Status value={row.status} /><View style={styles.actions}>{row.status === 'pending' ? <><Pressable disabled={loading} onPress={() => onReview(row.id, 'approved')} style={styles.approve}><Text style={styles.actionText}>Approve</Text></Pressable><Pressable disabled={loading} onPress={() => onReview(row.id, 'rejected')} style={styles.reject}><Text style={styles.rejectText}>Reject</Text></Pressable></> : <Text style={styles.cell}>Reviewed</Text>}</View></View>)}</View></ScrollView></>;
 }
 
 const styles = StyleSheet.create({
@@ -350,7 +379,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 25,
   },
-  tableScroll: { flexGrow: 1 }, tableWide: { minWidth: 760, flex: 1 },
+  tableScroll: { flexGrow: 1 }, tableWide: { minWidth: 760, flex: 1 }, topupTable: { minWidth: 820, flex: 1 },
   tableHead: {
     backgroundColor: colors.gray50,
     flexDirection: "row",

@@ -42,6 +42,7 @@ export function BookingProvider({ children }) {
   const [resumeTarget, setResumeTarget] = useState(null);
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
+  const [topupRequests, setTopupRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [syncError, setSyncError] = useState('');
@@ -57,10 +58,11 @@ export function BookingProvider({ children }) {
   const reload = useCallback(async () => {
     if (!user || user.role !== 'passenger') return;
     try {
-      const [profile, tx, trips] = await Promise.all([api.fetchProfile(user.id), api.listTransactions(user.id), api.listTrips('passenger_id', user.id)]);
+      const [profile, tx, trips, topups] = await Promise.all([api.fetchProfile(user.id), api.listTransactions(user.id), api.listTrips('passenger_id', user.id), api.listTopupRequests(user.id)]);
       setBalance(Number(profile.wallet_balance));
       setTransactions(tx.map(mapTx));
       setBookings(trips.filter((t) => !ACTIVE.includes(t.status)).map(mapTrip));
+      setTopupRequests(topups);
       setSyncError('');
     } catch (e) {
       setSyncError(e.message);
@@ -70,7 +72,7 @@ export function BookingProvider({ children }) {
   // ---- on login: load data, and continue a trip that was already running (app was closed) ----
   useEffect(() => {
     if (!user || user.role !== 'passenger') {
-      setBalance(0); setTransactions([]); setBookings([]); setNotifications([]); setTrip(null);
+      setBalance(0); setTransactions([]); setTopupRequests([]); setBookings([]); setNotifications([]); setTrip(null);
       return undefined;
     }
     reload();
@@ -223,10 +225,9 @@ export function BookingProvider({ children }) {
     await api.rateTrip(trip.id, rating, feedback);
   }, [trip]);
 
-  // Throws on failure so the Wallet screen can show the message.
-  const topUp = async (amount) => {
-    const newBalance = await api.topUpWallet(amount);
-    setBalance(newBalance);
+  // A passenger submits a cash-in request; an authorized admin credits it later.
+  const requestTopUp = async (amount, referenceNote) => {
+    await api.createTopupRequest(amount, referenceNote);
     await reload();
   };
 
@@ -237,11 +238,11 @@ export function BookingProvider({ children }) {
   const value = useMemo(
     () => ({
       pickup, setPickup, destination, setDestination, swap, route, fare, paymentMethod, setPaymentMethod, status, tripId, leg, legRoute, arrived,
-      riderLocation, driver, balance, transactions, bookings, notifications, lastTrip, etaMinutes, remainingKm, hasUnread, syncError, resumeTarget,
-      prepareTrip, requestRide, cancelRide, finishAndReset, rateTrip, topUp, markAllRead, clearResume,
+      riderLocation, driver, balance, transactions, topupRequests, bookings, notifications, lastTrip, etaMinutes, remainingKm, hasUnread, syncError, resumeTarget,
+      prepareTrip, requestRide, cancelRide, finishAndReset, rateTrip, requestTopUp, markAllRead, clearResume,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pickup, destination, route, fare, paymentMethod, status, tripId, leg, legRoute, arrived, riderLocation, trip, balance, transactions, bookings, notifications, lastTrip, etaMinutes, remainingKm, syncError, resumeTarget, prepareTrip, requestRide, cancelRide, finishAndReset, rateTrip]
+    [pickup, destination, route, fare, paymentMethod, status, tripId, leg, legRoute, arrived, riderLocation, trip, balance, transactions, topupRequests, bookings, notifications, lastTrip, etaMinutes, remainingKm, syncError, resumeTarget, prepareTrip, requestRide, cancelRide, finishAndReset, rateTrip]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
